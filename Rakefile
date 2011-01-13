@@ -1,24 +1,6 @@
 require 'rubygems'
 require 'rake'
 
-begin
-  require 'jeweler'
-  Jeweler::Tasks.new do |gem|
-    gem.name = "summer"
-    gem.summary = %Q{Tiny IRC Bot Framework}
-    gem.description = %Q{Tiny IRC Bot Frameowkr}
-    gem.email = "radarlistener@gmail.com"
-    gem.homepage = "http://github.com/radar/summer"
-    gem.authors = ["Ryan Bigg"]
-    # gem.add_dependency("activerecord", ">= 2.3.5")
-    # gem.add_dependency("activesupport", ">= 2.3.5")
-    gem.files = Dir["lib/**/*.rb"]
-    # gem is a Gem::Specification... see http://www.rubygems.org/read/chapter/20 for additional settings
-  end
-rescue LoadError
-  puts "Jeweler (or a dependency) not available. Install it with: sudo gem install jeweler"
-end
-
 require 'rake/testtask'
 Rake::TestTask.new(:test) do |test|
   test.libs << 'lib' << 'test'
