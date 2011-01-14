@@ -18,6 +18,8 @@ module Summer
       @server = server
       @port = port
 
+      @socket_mutex = Mutex.new
+
       load_config
       connect!
       
@@ -81,19 +83,10 @@ module Summer
         send("handle_#{raw}", message) if raws_to_handle.include?(raw)
       # Privmsgs
       elsif raw == "PRIVMSG"
-        message = words[3..-1].clean
-        # Parse commands
-        if /^!(\w+)\s*(.*)/.match(message) && respond_to?("#{$1}_command")
-          really_try("#{$1}_command", parse_sender(sender), channel, $2)
-        # Plain and boring message
-        else
-          sender = parse_sender(sender)
-          method, channel = channel == me ? [:private_message, sender[:nick]]  : [:channel_message, channel]
-          really_try(method, sender, channel, message)
-        end
+        handle_privmsg(words[3..-1].clean, parse_sender(sender), channel)
       # Joins
       elsif raw == "JOIN"
-        really_try(:join, parse_sender(sender), channel)
+        really_try(:joined, parse_sender(sender), channel.delete(":"))
       elsif raw == "PART"
         really_try(:part, parse_sender(sender), channel, words[3..-1].clean)
       elsif raw == "QUIT"
@@ -104,7 +97,28 @@ module Summer
       elsif raw == "MODE"
         really_try(:mode, parse_sender(sender), channel, words[3], words[4..-1].clean)
       end
+    end
 
+    def handle_privmsg(message, sender, channel)
+      if channel == me
+        handle_msg_to_me(message, sender, sender[:nick])
+      elsif message.include?(me)
+        handle_msg_mentions_me(message, sender, channel)
+      else
+        really_try(:channel_message, sender, channel, message)
+      end
+    end
+
+    def handle_msg_to_me(message, sender, channel)
+      if /^!(\w+)\s*(.*)/.match(message)
+        really_try("#{$1}_command", sender, channel, $2)
+      else
+        really_try(:private_message, sender, channel, message)
+      end
+    end
+
+    def handle_msg_mentions_me(message, sender, channel)
+      really_try(:mentions_me_message, sender, channel, message)
     end
 
     def parse_sender(sender)
@@ -118,13 +132,17 @@ module Summer
     end
 
     def privmsg(message, to)
-      response("PRIVMSG #{to} :#{message}")
+      Thread.new {
+        message.split("\n").each { |line| response("PRIVMSG #{to} :#{line}"); sleep(0.9) }
+      }
     end
 
     # Output something to the console and to the socket.
     def response(message)
-      puts ">> #{message.strip}"
-      @connection.puts(message)
+      @socket_mutex.synchronize do
+        puts ">> #{message.strip}"
+        @connection.puts(message)
+     end
     end
 
     def me
