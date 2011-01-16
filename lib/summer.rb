@@ -132,9 +132,7 @@ module Summer
     end
 
     def privmsg(message, to)
-      Thread.new {
-        message.split("\n").each { |line| response("PRIVMSG #{to} :#{line}"); sleep(0.9) }
-      }
+      response "PRIVMSG #{to} :#{message}"
     end
 
     # Output something to the console and to the socket.
