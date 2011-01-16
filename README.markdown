@@ -5,7 +5,7 @@ Summer is an IRC Bot "framework" "inspired" by [http://github.com/RISCFuture/aut
 ## Installation
 
 The project is currently in "preview" state 'cause that's all the rage nowadays. No there's no invites, BUT everybody gets access to it.
-Sorry to inform you that you'll have to clone it and then run `ore` to create a gem in the pkg directory. 
+Sorry to inform you that you'll have to clone it and then run `rake install` if you want to use it.
 
 ## Usage
 
