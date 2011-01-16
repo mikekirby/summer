@@ -86,7 +86,8 @@ module Summer
         handle_privmsg(words[3..-1].clean, parse_sender(sender), channel)
       # Joins
       elsif raw == "JOIN"
-        really_try(:joined, parse_sender(sender), channel.delete(":"))
+        s = parse_sender(sender)
+        really_try(:joined, s, channel.delete(":")) unless (s[:nick] == me)
       elsif raw == "PART"
         really_try(:part, parse_sender(sender), channel, words[3..-1].clean)
       elsif raw == "QUIT"
