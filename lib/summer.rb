@@ -1,8 +1,3 @@
-require 'socket'
-require 'yaml'
-require 'active_support/hash_with_indifferent_access'
-require 'active_support/core_ext/object/try'
-
 Dir[File.dirname(__FILE__) + '/ext/*.rb'].each { |f| require f }
 
 require File.dirname(__FILE__) + "/summer/handlers"
@@ -11,38 +6,34 @@ module Summer
   class Connection
     include Handlers
     attr_accessor :connection, :ready, :started, :config, :server, :port
-    def initialize(server, port=6667, dry=false)
+    def initialize(connection, handler, config)
+      @connection = connection
+      @handler = handler
+      @config = config
       @ready = false
       @started = false
-
-      @server = server
-      @port = port
-
       @socket_mutex = Mutex.new
+    end
 
-      load_config
+    def run
       connect!
-      
-      unless dry
-        loop do
-          startup! if @ready && !@started
-          parse(@connection.gets)
-        end
+
+      loop do
+        startup! if @ready && !@started
+        parse(@connection.gets)
       end
+    end
+
+    def me
+      config[:nick]
     end
 
     private
 
-    def load_config
-      @config = HashWithIndifferentAccess.new(YAML::load_file(File.dirname($0) + "/config/summer.yml"))
-    end
-
     def connect!
-      @connection = TCPSocket.open(server, port)      
       response("USER #{config[:nick]} #{config[:nick]} #{config[:nick]} #{config[:nick]}")
       response("NICK #{config[:nick]}")
     end
-
 
     # Will join channels specified in configuration.
     def startup!
@@ -51,9 +42,9 @@ module Summer
         join(channel)
       end
       @started = true
-      really_try(:did_start_up) if respond_to?(:did_start_up)
+      @handler.did_startup
     end
-    
+
     def nickserv_identify
       privmsg("nickserv", "register #{@config[:nickserv_password]} #{@config[:nickserv_email]}")
       privmsg("nickserv", "identify #{@config[:nickserv_password]}")
@@ -83,43 +74,41 @@ module Summer
         send("handle_#{raw}", message) if raws_to_handle.include?(raw)
       # Privmsgs
       elsif raw == "PRIVMSG"
+      if channel == me
+        @handler.handle_msg_to_me(message, sender, sender[:nick])
+      else
+        @handler.channel_message(sender, channel, message)
+      end
+
         handle_privmsg(words[3..-1].clean, parse_sender(sender), channel)
       # Joins
       elsif raw == "JOIN"
         s = parse_sender(sender)
-        really_try(:joined, s, channel.delete(":")) unless (s[:nick] == me)
+        @handler.joined(s, channel.delete(":")) unless (s[:nick] == me)
       elsif raw == "PART"
+        #@handler.part(parse_sender(sender), channel, words[3..-1].clean)
         really_try(:part, parse_sender(sender), channel, words[3..-1].clean)
       elsif raw == "QUIT"
+        #@handler.quit(parse_sender(sender), words[2..-1].clean)
         really_try(:quit, parse_sender(sender), words[2..-1].clean)
       elsif raw == "KICK"
+        #@handler.kick(parse_sender(sender), channel, words[3], words[4..-1].clean)
         really_try(:kick, parse_sender(sender), channel, words[3], words[4..-1].clean)
         join(channel) if words[3] == me && config[:auto_rejoin]
       elsif raw == "MODE"
+        #@handler.mode(parse_sender(sender), channel, words[3], words[4..-1].clean)
         really_try(:mode, parse_sender(sender), channel, words[3], words[4..-1].clean)
       end
     end
 
     def handle_privmsg(message, sender, channel)
       if channel == me
-        handle_msg_to_me(message, sender, sender[:nick])
+        @handler.handle_msg_to_me(message, sender, sender[:nick])
       elsif message.include?(me)
-        handle_msg_mentions_me(message, sender, channel)
+        @handler.handle_msg_mentions_me(message, sender, channel)
       else
-        really_try(:channel_message, sender, channel, message)
+        @handler.channel_message(sender, channel, message)
       end
-    end
-
-    def handle_msg_to_me(message, sender, channel)
-      if /^!(\w+)\s*(.*)/.match(message)
-        really_try("#{$1}_command", sender, channel, $2)
-      else
-        really_try(:private_message, sender, channel, message)
-      end
-    end
-
-    def handle_msg_mentions_me(message, sender, channel)
-      really_try(:mentions_me_message, sender, channel, message)
     end
 
     def parse_sender(sender)
@@ -133,7 +122,7 @@ module Summer
     end
 
     def privmsg(message, to)
-      response "PRIVMSG #{to} :#{message}"
+      response("PRIVMSG #{to} :#{message}")
     end
 
     # Output something to the console and to the socket.
@@ -141,13 +130,9 @@ module Summer
       @socket_mutex.synchronize do
         puts ">> #{message.strip}"
         @connection.puts(message)
-     end
+      end
     end
 
-    def me
-      config[:nick]
-    end
-    
     def log(message)
       File.open(config[:log_file]) { |file| file.write(message) } if config[:log_file]
     end
