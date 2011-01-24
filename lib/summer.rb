@@ -74,13 +74,13 @@ module Summer
         send("handle_#{raw}", message) if raws_to_handle.include?(raw)
       # Privmsgs
       elsif raw == "PRIVMSG"
-      if channel == me
-        @handler.handle_msg_to_me(message, sender, sender[:nick])
-      else
-        @handler.channel_message(sender, channel, message)
-      end
-
-        handle_privmsg(words[3..-1].clean, parse_sender(sender), channel)
+        message = words[3..-1].clean
+        sender = parse_sender(sender)
+        if channel == me
+          @handler.handle_msg_to_me(message, sender, sender[:nick])
+        else
+          @handler.channel_message(message, sender, channel)
+        end
       # Joins
       elsif raw == "JOIN"
         s = parse_sender(sender)
@@ -98,16 +98,6 @@ module Summer
       elsif raw == "MODE"
         #@handler.mode(parse_sender(sender), channel, words[3], words[4..-1].clean)
         really_try(:mode, parse_sender(sender), channel, words[3], words[4..-1].clean)
-      end
-    end
-
-    def handle_privmsg(message, sender, channel)
-      if channel == me
-        @handler.handle_msg_to_me(message, sender, sender[:nick])
-      elsif message.include?(me)
-        @handler.handle_msg_mentions_me(message, sender, channel)
-      else
-        @handler.channel_message(sender, channel, message)
       end
     end
 
