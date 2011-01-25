@@ -21,10 +21,12 @@ module Summer
       @runner = Thread.new {
         begin
           run()
-        rescue
+        rescue StandardError => e
           @runner = nil
-          puts $@
+          $stdout.puts $@
+          $stdout.puts e
         end
+        $stdout.puts "stopped."
       } unless @runner
     end
 
@@ -39,23 +41,27 @@ module Summer
     private
 
     def run
+      $stdout.puts "running irc client..."
+      connect! if not @started #handlers set @ready
       until @stop
         startup! if @ready and not @started
         parse(@connection.gets)
       end
+      $stdout.puts "stoping irc client..."
     end
 
     def connect!
+      $stdout.puts "connecting irc client..."
       response("USER #{@config[:nick]} #{@config[:nick]} #{@config[:nick]} #{@config[:nick]}")
       response("NICK #{@config[:nick]}")
     end
 
     # Will join channels specified in configuration.
     def startup!
-      connect!
+      $stdout.puts "starting up irc client..."
       nickserv_identify if @config[:nickserv_password]
       (@config[:channels] << @config[:channel]).compact.each do |channel|
-        join(channel)
+        join(channel) unless channel.strip.empty?
       end
       @started = true
       @handler.did_startup
@@ -90,9 +96,10 @@ module Summer
         send("handle_#{raw}", message) if raws_to_handle.include?(raw)
       # Privmsgs
       elsif raw == "PRIVMSG" and channel == me
-        @handler.private_message(words[3..-1].clean, parse_sender(sender), sender[:nick])
+        s = parse_sender(sender)
+        @handler.private_message(s, s[:nick], words[3..-1].clean)
       elsif raw == "PRIVMSG"
-        @handler.channel_message(words[3..-1].clean, parse_sender(sender), channel)
+        @handler.channel_message(parse_sender(sender), channel, words[3..-1].clean)
       # Joins
       elsif raw == "JOIN"
         s = parse_sender(sender)
@@ -110,6 +117,8 @@ module Summer
       elsif raw == "MODE"
         #@handler.mode(parse_sender(sender), channel, words[3], words[4..-1].clean)
         really_try(:mode, parse_sender(sender), channel, words[3], words[4..-1].clean)
+      else
+        $stdout.puts "(ignored)"
       end
     end
 
@@ -130,7 +139,7 @@ module Summer
     # Output something to the console and to the socket.
     def response(message)
       @socket_mutex.synchronize do
-        puts ">> #{message.strip}"
+        $stdout.puts ">> #{message.strip}"
         @connection.puts(message)
       end
     end
