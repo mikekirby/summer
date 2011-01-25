@@ -18,16 +18,20 @@ module Summer
     end
 
     def start
-      @runner = Thread.new {
-        begin
-          run()
-        rescue StandardError => e
-          @runner = nil
-          $stdout.puts $@
-          $stdout.puts e
+      @runner ||= Thread.new {
+        until @stop
+          begin
+            run()
+          rescue StandardError => e
+            @runner = nil
+            $stdout.puts $@
+            $stdout.puts e
+          end
+          $stdout.puts "sleeping..."
+          sleep 60
         end
-        $stdout.puts "stopped."
-      } unless @runner
+        $stdout.puts "irc client exited."
+      }
     end
 
     def stop
