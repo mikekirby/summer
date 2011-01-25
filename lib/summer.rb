@@ -27,6 +27,7 @@ module Summer
             $stdout.puts $@
             $stdout.puts e
           end
+          @started = @ready = false
           $stdout.puts "sleeping..."
           sleep 60
         end
@@ -51,6 +52,7 @@ module Summer
         startup! if @ready and not @started
         parse(@connection.gets)
       end
+      @started = @ready = false
       $stdout.puts "stoping irc client..."
     end
 
