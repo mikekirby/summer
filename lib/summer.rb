@@ -5,7 +5,7 @@ require File.dirname(__FILE__) + "/summer/handlers"
 module Summer
   class Connection
     include Handlers
-    attr_accessor :connection, :ready, :started, :config, :server, :port
+    attr_accessor :connection, :ready, :started
     def initialize(connection, handler, config)
       @connection = connection
       @handler = handler
@@ -13,30 +13,46 @@ module Summer
       @ready = false
       @started = false
       @socket_mutex = Mutex.new
+      @runner = nil #Running thread
+      @stop = false
     end
 
-    def run
-      connect!
+    def start
+      @runner = Thread.new {
+        begin
+          run()
+        rescue
+          @runner = nil
+          puts $@
+        end
+      } unless @runner
+    end
 
-      loop do
-        startup! if @ready && !@started
-        parse(@connection.gets)
-      end
+    def stop
+      @stop = true
     end
 
     def me
-      config[:nick]
+      @config[:nick]
     end
 
     private
 
+    def run
+      until @stop
+        startup! if @ready and not @started
+        parse(@connection.gets)
+      end
+    end
+
     def connect!
-      response("USER #{config[:nick]} #{config[:nick]} #{config[:nick]} #{config[:nick]}")
-      response("NICK #{config[:nick]}")
+      response("USER #{@config[:nick]} #{@config[:nick]} #{@config[:nick]} #{@config[:nick]}")
+      response("NICK #{@config[:nick]}")
     end
 
     # Will join channels specified in configuration.
     def startup!
+      connect!
       nickserv_identify if @config[:nickserv_password]
       (@config[:channels] << @config[:channel]).compact.each do |channel|
         join(channel)
@@ -73,14 +89,10 @@ module Summer
       elsif /\d+/.match(raw)
         send("handle_#{raw}", message) if raws_to_handle.include?(raw)
       # Privmsgs
+      elsif raw == "PRIVMSG" and channel == me
+        @handler.private_message(words[3..-1].clean, parse_sender(sender), sender[:nick])
       elsif raw == "PRIVMSG"
-        message = words[3..-1].clean
-        sender = parse_sender(sender)
-        if channel == me
-          @handler.handle_msg_to_me(message, sender, sender[:nick])
-        else
-          @handler.channel_message(message, sender, channel)
-        end
+        @handler.channel_message(words[3..-1].clean, parse_sender(sender), channel)
       # Joins
       elsif raw == "JOIN"
         s = parse_sender(sender)
@@ -94,7 +106,7 @@ module Summer
       elsif raw == "KICK"
         #@handler.kick(parse_sender(sender), channel, words[3], words[4..-1].clean)
         really_try(:kick, parse_sender(sender), channel, words[3], words[4..-1].clean)
-        join(channel) if words[3] == me && config[:auto_rejoin]
+        join(channel) if words[3] == me && @config[:auto_rejoin]
       elsif raw == "MODE"
         #@handler.mode(parse_sender(sender), channel, words[3], words[4..-1].clean)
         really_try(:mode, parse_sender(sender), channel, words[3], words[4..-1].clean)
@@ -124,7 +136,7 @@ module Summer
     end
 
     def log(message)
-      File.open(config[:log_file]) { |file| file.write(message) } if config[:log_file]
+      File.open(@config[:log_file]) { |file| file.write(message) } if @config[:log_file]
     end
 
   end
