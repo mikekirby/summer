@@ -14,29 +14,24 @@ module Summer
       @started = false
       @socket_mutex = Mutex.new
       @runner = nil #Running thread
-      @stop = false
     end
 
     def start
       @runner ||= Thread.new {
-        until @stop
-          begin
-            run()
-          rescue StandardError => e
-            @runner = nil
-            $stdout.puts $@
-            $stdout.puts e
-          end
-          @started = @ready = false
-          $stdout.puts "sleeping..."
-          sleep 60
+        begin
+          run()
+        rescue StandardError => e
+          @runner = nil
+          $stdout.puts $@
+          $stdout.puts e
         end
+        @started = @ready = false
         $stdout.puts "irc client exited."
       }
     end
 
     def stop
-      @stop = true
+      @runner.kill
     end
 
     def me
@@ -48,12 +43,10 @@ module Summer
     def run
       $stdout.puts "running irc client..."
       connect! if not @started #handlers set @ready
-      until @stop
+      loop do
         startup! if @ready and not @started
         parse(@connection.gets)
       end
-      @started = @ready = false
-      $stdout.puts "stoping irc client..."
     end
 
     def connect!
